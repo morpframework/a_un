@@ -64,18 +64,18 @@ def generate_keypair(args):
     with open("%s.crt" % name, "w") as f:
         f.write("# RSA public key \n")
         f.write(pair["crt"])
-    print("Written: %s.key and %s.pub" % (name, name))
+    print("Written: %s.key and %s.crt" % (name, name))
 
 
 def generate_license(args):
 
-    start_date = parse_date(args.start_date).replace(tzinfo=pytz.UTC)
+    start_date = parse_date(args.start_date).astimezone(pytz.UTC)
     end_date = start_date + timedelta(days=args.days)
 
     with open(args.key_file, "r") as f:
         key = f.read()
 
-    extra_opts = {"created": time.time()}
+    extra_opts = {"created": int(time.time())}
     if args.comment:
         extra_opts["comment"] = args.comment
     license = gen_license(
