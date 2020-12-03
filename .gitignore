@@ -1,0 +1,16 @@
+*.pyc
+*.pyo
+*.egg-info
+*.egg
+*.db
+bin/
+parts/
+develop-eggs/
+dev/
+venv/
+.mypy_cache/
+.installed.cfg
+._*
+.DS_Store
+*~
+*.swp
