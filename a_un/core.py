@@ -4,6 +4,7 @@ import json
 import os
 import textwrap
 import time
+import typing
 
 from Crypto.PublicKey import RSA
 
@@ -26,29 +27,45 @@ def decode(s: str) -> dict:
     return json.loads(j)
 
 
-def gen_license(key: str, start: int, days: int):
+def hash(message: str):
+    message = message.encode("utf8")
+    return int.from_bytes(hashlib.sha512(message).digest(), byteorder="big")
+
+
+def encrypt(message, d, n):
+    return hex(pow(message, d, n))
+
+
+def decrypt(message, e, n):
+    message = int(message, 16)
+    return pow(message, e, n)
+
+
+def gen_license(key: str, start: int, end: int, **extra_opts):
     privkey = decode(key)
     privkey["d"] = int(privkey["d"], 16)
     privkey["n"] = int(privkey["n"], 16)
 
-    end = start + (days * 24 * 60 * 60)
-    message = json.dumps({"start": start, "end": end}).encode("utf8")
-    hash = int.from_bytes(hashlib.sha512(message).digest(), byteorder="big")
-    signature = pow(hash, privkey["d"], privkey["n"])
+    data = {"start": start, "end": end}
+
+    data.update(extra_opts)
+    message = json.dumps(data)
+    messagehash = hash(message)
+    signature = encrypt(messagehash, privkey["d"], privkey["n"])
     payload = "%s%s%s" % (message, sep, signature)
     return encode(payload)
 
 
 def gen_keypair(size=4096):
     keypair = RSA.generate(size)
-    key = json.dumps({"d": hex(keypair.d), "n": hex(keypair.n)})
-    crt = json.dumps({"e": hex(keypair.e), "n": hex(keypair.n)})
+    key = {"d": hex(keypair.d), "n": hex(keypair.n)}
+    crt = {"e": hex(keypair.e), "n": hex(keypair.n)}
     return {"key": encode(key), "crt": encode(crt)}
 
 
-def validate_license(crt: str, license_key: str) -> bool:
+def validate_license(crt: str, license_key: str) -> typing.Optional[dict]:
     if not license_key:
-        return False
+        return None
 
     pubkey = decode(crt)
     pubkey["n"] = int(pubkey["n"], 16)
@@ -58,16 +75,14 @@ def validate_license(crt: str, license_key: str) -> bool:
     try:
         message, signature = payload.split(sep)
     except ValueError:
-        return False
-    hash = int.from_bytes(
-        hashlib.sha512(message.encode("utf8")).digest(), byteorder="big"
-    )
-    signature = int(signature, 16)
-    sighash = pow(signature, pubkey["e"], pubkey["n"])
-    if hash != sighash:
-        return False
+        return None
+
+    messagehash = hash(message)
+    sighash = decrypt(signature, pubkey["e"], pubkey["n"])
+    if messagehash != sighash:
+        return None
 
     license_data = json.loads(message)
     if license_data["start"] < time.time() < license_data["end"]:
-        return True
-    return False
+        return license_data
+    return None
